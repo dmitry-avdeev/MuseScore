@@ -37,6 +37,12 @@ std::string PlaybackCommandsState::moduleName() const
 
 void PlaybackCommandsState::init()
 {
+    // In converter/headless mode some of these services are not registered;
+    // skip wiring up UI command state to avoid dereferencing null injects.
+    if (!globalContext() || !interactive() || !playbackController() || !commandsRegister()) {
+        return;
+    }
+
     globalContext()->currentProjectChanged().onNotify(this, [this]() {
         updateCommandStates();
     });
