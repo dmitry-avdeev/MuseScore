@@ -490,28 +490,25 @@ static std::string durElemTicksToStdString(const DurationElement& d)
 
 static String positionToString(const PointF def, const PointF rel, const float spatium)
 {
-    // minimum value to export
-    const float positionElipson = 0.1f;
+    // convert into tenths and round to whole tenths, matching Finale's integer coordinates
+    const int defaultX  = int(lround(10 * def.x() / spatium));
+    const int defaultY  = int(lround(-10 * def.y() / spatium));
+    const int relativeX = int(lround(10 * rel.x() / spatium));
+    const int relativeY = int(lround(-10 * rel.y() / spatium));
 
-    // convert into tenths for MusicXML
-    const float defaultX =  10 * def.x() / spatium;
-    const float defaultY =  -10 * def.y() / spatium;
-    const float relativeX =  10 * rel.x() / spatium;
-    const float relativeY =  -10 * rel.y() / spatium;
-
-    // generate string representation
+    // generate string representation (omit whole-tenth zeros)
     String res;
-    if (fabsf(defaultX) > positionElipson) {
-        res += String(u" default-x=\"%1\"").arg(String::number(defaultX, 2));
+    if (defaultX != 0) {
+        res += String(u" default-x=\"%1\"").arg(defaultX);
     }
-    if (fabsf(defaultY) > positionElipson) {
-        res += String(u" default-y=\"%1\"").arg(String::number(defaultY, 2));
+    if (defaultY != 0) {
+        res += String(u" default-y=\"%1\"").arg(defaultY);
     }
-    if (fabsf(relativeX) > positionElipson) {
-        res += String(u" relative-x=\"%1\"").arg(String::number(relativeX, 2));
+    if (relativeX != 0) {
+        res += String(u" relative-x=\"%1\"").arg(relativeX);
     }
-    if (fabsf(relativeY) > positionElipson) {
-        res += String(u" relative-y=\"%1\"").arg(String::number(relativeY, 2));
+    if (relativeY != 0) {
+        res += String(u" relative-y=\"%1\"").arg(relativeY);
     }
 
     return res;
@@ -763,14 +760,14 @@ static String slurTieBezier(const SlurTie* st, const bool start)
             const SlurTieSegment* front = toSlurTieSegment(st->frontSegment());
             const PointF startP = front->ups(Grip::START).pos();
             const PointF bezierP = front->ups(Grip::BEZIER1).pos();
-            attributeString += String(u" bezier-x=\"%1\"").arg(10 * (bezierP.x() - startP.x()) / spatium);
-            attributeString += String(u" bezier-y=\"%1\"").arg(-10 * (bezierP.y() - startP.y()) / spatium);
+            attributeString += String(u" bezier-x=\"%1\"").arg(int(lround(10 * (bezierP.x() - startP.x()) / spatium)));
+            attributeString += String(u" bezier-y=\"%1\"").arg(int(lround(-10 * (bezierP.y() - startP.y()) / spatium)));
         } else {
             const SlurTieSegment* back = toSlurTieSegment(st->backSegment());
             const PointF endP = back->ups(Grip::END).pos();
             const PointF bezierP = back->ups(Grip::BEZIER2).pos();
-            attributeString += String(u" bezier-x=\"%1\"").arg(10 * (bezierP.x() - endP.x()) / spatium);
-            attributeString += String(u" bezier-y=\"%1\"").arg(-10 * (bezierP.y() - endP.y()) / spatium);
+            attributeString += String(u" bezier-x=\"%1\"").arg(int(lround(10 * (bezierP.x() - endP.x()) / spatium)));
+            attributeString += String(u" bezier-y=\"%1\"").arg(int(lround(-10 * (bezierP.y() - endP.y()) / spatium)));
         }
     }
 
@@ -1473,8 +1470,8 @@ static void creditWords(XmlWriter& xml, const MStyle& s, const page_idx_t pageNr
     if (!creditType.empty()) {
         xml.tag("credit-type", creditType);
     }
-    String attr = String(u" default-x=\"%1\"").arg(String::number(x, 2));
-    attr += String(u" default-y=\"%1\"").arg(String::number(y, 2));
+    String attr = String(u" default-x=\"%1\"").arg(int(lround(x)));
+    attr += String(u" default-y=\"%1\"").arg(int(lround(y)));
     attr += u" justify=\"" + just + u"\"";
     attr += u" valign=\"" + val + u"\"";
     MScoreTextToMusicXml mttm(u"credit-words", attr, defFmt, mtf);
@@ -1942,16 +1939,15 @@ String ExportMusicXml::fermataPosition(const Fermata* const fermata)
 
     if (configuration()->exportLayout()) {
         constexpr double SPATIUM2TENTHS = 10;
-        constexpr double EPSILON = 0.01;
         const double spatium = fermata->spatium();
-        const double defY = -1 * SPATIUM2TENTHS * fermata->ldata()->pos().y() / spatium;
-        const double relY = -1 * SPATIUM2TENTHS * fermata->offset().y() / spatium;
+        const int defY = int(lround(-1 * SPATIUM2TENTHS * fermata->ldata()->pos().y() / spatium));
+        const int relY = int(lround(-1 * SPATIUM2TENTHS * fermata->offset().y() / spatium));
 
-        if (std::abs(defY) >= EPSILON) {
-            res += String(u" default-y=\"%1\"").arg(String::number(defY, 2));
+        if (defY != 0) {
+            res += String(u" default-y=\"%1\"").arg(defY);
         }
-        if (std::abs(relY) >= EPSILON) {
-            res += String(u" relative-y=\"%1\"").arg(String::number(relY, 2));
+        if (relY != 0) {
+            res += String(u" relative-y=\"%1\"").arg(relY);
         }
     }
 
@@ -4330,11 +4326,12 @@ String ExportMusicXml::measureRelativePosition(const ExportMusicXml* const expMx
         double elemX = expMxml->getTenthsFromDots(pagePos.x());
         double elemY = pageHeight - expMxml->getTenthsFromDots(pagePos.y());
 
+        // round to whole tenths, matching Finale's integer coordinates
         if (includeX) {
-            res += String(u" default-x=\"%1\"").arg(String::number(elemX - measureX, 2));
+            res += String(u" default-x=\"%1\"").arg(int(lround(elemX - measureX)));
         }
         if (includeY) {
-            res += String(u" default-y=\"%1\"").arg(String::number(elemY - measureY, 2));
+            res += String(u" default-y=\"%1\"").arg(int(lround(elemY - measureY)));
         }
     }
 
