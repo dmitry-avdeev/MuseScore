@@ -7348,19 +7348,25 @@ static void midiInstrument(XmlWriter& xml, const size_t partNr, const int instrN
                            const Instrument* instr, const Score* score, const int unpitched = 0)
 {
     xml.startElementRaw(String(u"midi-instrument %1").arg(instrId(partNr, instrNr)));
-    int midiChannel = score->masterScore()->midiChannel(instr->channel(0)->channel());
-    if (midiChannel >= 0 && midiChannel < 16) {
-        xml.tag("midi-channel", midiChannel + 1);
-    }
-    int midiProgram = instr->channel(0)->program();
-    if (midiProgram >= 0 && midiProgram < 128) {
-        xml.tag("midi-program", midiProgram + 1);
+    // scores imported without MIDI data (e.g. from abc2xml) may have no channel(0)
+    const InstrChannel* ch = instr ? instr->channel(0) : nullptr;
+    if (ch) {
+        int midiChannel = score->masterScore()->midiChannel(ch->channel());
+        if (midiChannel >= 0 && midiChannel < 16) {
+            xml.tag("midi-channel", midiChannel + 1);
+        }
+        int midiProgram = ch->program();
+        if (midiProgram >= 0 && midiProgram < 128) {
+            xml.tag("midi-program", midiProgram + 1);
+        }
     }
     if (unpitched > 0) {
         xml.tag("midi-unpitched", unpitched);
     }
-    xml.tag("volume", (instr->channel(0)->volume() / 127.0) * 100);    //percent
-    xml.tag("pan", int(((instr->channel(0)->pan() - 63.5) / 63.5) * 90));   //-90 hard left, +90 hard right      xml.etag();
+    if (ch) {
+        xml.tag("volume", (ch->volume() / 127.0) * 100);    //percent
+        xml.tag("pan", int(((ch->pan() - 63.5) / 63.5) * 90));   //-90 hard left, +90 hard right
+    }
     xml.endElement();
 }
 
@@ -7936,7 +7942,11 @@ static void partList(XmlWriter& xml, Score* score, MusicXmlInstrumentMap& instrM
                 int instNr = ii->first;
                 int midiPort = part->midiPort() + 1;
                 if (ii->second->channel().size() > 0) {
-                    midiPort = score->masterScore()->midiMapping(ii->second->channel(0)->channel())->port() + 1;
+                    const int ch = ii->second->channel(0)->channel();
+                    const auto& mapping = score->masterScore()->midiMapping();
+                    if (ch >= 0 && ch < int(mapping.size())) {
+                        midiPort = mapping[ch].port() + 1;
+                    }
                 }
                 if (midiPort >= 1 && midiPort <= 16) {
                     xml.tagRaw(String(u"midi-device %1 port=\"%2\"").arg(instrId(idx + 1, instNr + 1)).arg(midiPort), "");
