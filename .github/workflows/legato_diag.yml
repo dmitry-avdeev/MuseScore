@@ -1,0 +1,57 @@
+name: 'Legato: diagnose mscore crash'
+
+# Downloads the released patched AppImage and runs it headless under xvfb+gdb to
+# capture a backtrace of the segfault seen on the HuggingFace Space.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb gdb dbus-x11 libxcb-cursor0 libopengl0 \
+            libegl1 libgl1-mesa-dri libnss3 libasound2
+
+      - name: Download + extract released AppImage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download legato-linux-x64 --repo "${{ github.repository }}" \
+            --pattern '*x86_64*.AppImage' --output mscore.AppImage
+          chmod +x mscore.AppImage
+          ./mscore.AppImage --appimage-extract >/dev/null
+          echo "extracted:"; ls squashfs-root/AppRun
+
+      - name: Minimal score
+        run: |
+          cat > in.musicxml <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <score-partwise version="4.0">
+            <part-list><score-part id="P1"><part-name>P</part-name></score-part></part-list>
+            <part id="P1"><measure number="1">
+              <attributes><divisions>1</divisions><key><fifths>0</fifths></key>
+                <time><beats>4</beats><beat-type>4</beat-type></time>
+                <clef><sign>G</sign><line>2</line></clef></attributes>
+              <note><pitch><step>C</step><octave>5</octave></pitch><duration>4</duration><type>whole</type></note>
+            </measure></part>
+          </score-partwise>
+          XML
+
+      - name: gdb --version (isolate init-time crash)
+        run: |
+          export HOME="$PWD/h"; mkdir -p "$HOME"
+          xvfb-run -a gdb -batch -ex run -ex 'bt' --args \
+            ./squashfs-root/AppRun --version 2>&1 | tail -40 || true
+
+      - name: gdb convert (the real path)
+        run: |
+          export HOME="$PWD/h"; mkdir -p "$HOME"
+          xvfb-run -a gdb -batch -ex run -ex 'bt' --args \
+            ./squashfs-root/AppRun in.musicxml -o out.musicxml 2>&1 | tail -60 || true
+          echo "--- output? ---"; ls -la out.musicxml 2>&1 || echo "no output produced"
