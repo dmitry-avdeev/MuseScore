@@ -54,7 +54,7 @@ jobs:
           ulimit -c unlimited
           sudo sysctl -w kernel.core_pattern="$PWD/core.%e.%p" || true
           echo "=== run via AppRun (sets bundled env) ==="
-          xvfb-run -a ./squashfs-root/AppRun in.musicxml -o out.musicxml; echo "exit=$?"
+          xvfb-run -a ./squashfs-root/AppRun in.musicxml -o out.musicxml || echo "exit=$?"
           echo "=== output? ==="; ls -la out.musicxml 2>&1 || echo "no output"
           echo "=== cores ==="; ls -la core.* 2>&1 || echo "no core"
           core=$(ls core.* 2>/dev/null | head -1)
