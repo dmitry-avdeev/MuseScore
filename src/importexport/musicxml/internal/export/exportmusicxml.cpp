@@ -414,6 +414,8 @@ private:
     void writeParts();
     bool shouldWritePageNo(const Page* page);
 
+    static String measureRelativePosition(const ExportMusicXml* const expMxml, const Measure* const meas, const PointF& pagePos,
+                                          const bool includeX = true, const bool includeY = true);
     static String elementPosition(const ExportMusicXml* const expMxml, const EngravingItem* const elm);
     static String positioningAttributesForTboxText(const PointF position, float spatium);
     void identification(XmlWriter& xml, Score const* const score);
@@ -4303,28 +4305,37 @@ static void writePitch(XmlWriter& xml, const Note* const note, const bool useDru
 //   elementPosition
 //---------------------------------------------------------
 
-String ExportMusicXml::elementPosition(const ExportMusicXml* const expMxml, const EngravingItem* const elm)
+String ExportMusicXml::measureRelativePosition(const ExportMusicXml* const expMxml, const Measure* const meas, const PointF& pagePos,
+                                               const bool includeX, const bool includeY)
 {
     String res;
 
     if (configuration()->exportLayout()) {
-        const double pageHeight  = expMxml->getTenthsFromInches(expMxml->score()->style().styleD(Sid::pageHeight));
-
-        const Measure* meas = elm->findMeasure();
         IF_ASSERT_FAILED(meas) {
             return res;
         }
 
+        const double pageHeight  = expMxml->getTenthsFromInches(expMxml->score()->style().styleD(Sid::pageHeight));
+
         double measureX = expMxml->getTenthsFromDots(meas->pagePos().x());
         double measureY = pageHeight - expMxml->getTenthsFromDots(meas->pagePos().y());
-        double noteX = expMxml->getTenthsFromDots(elm->pagePos().x());
-        double noteY = pageHeight - expMxml->getTenthsFromDots(elm->pagePos().y());
+        double elemX = expMxml->getTenthsFromDots(pagePos.x());
+        double elemY = pageHeight - expMxml->getTenthsFromDots(pagePos.y());
 
-        res += String(u" default-x=\"%1\"").arg(String::number(noteX - measureX, 2));
-        res += String(u" default-y=\"%1\"").arg(String::number(noteY - measureY, 2));
+        if (includeX) {
+            res += String(u" default-x=\"%1\"").arg(String::number(elemX - measureX, 2));
+        }
+        if (includeY) {
+            res += String(u" default-y=\"%1\"").arg(String::number(elemY - measureY, 2));
+        }
     }
 
     return res;
+}
+
+String ExportMusicXml::elementPosition(const ExportMusicXml* const expMxml, const EngravingItem* const elm)
+{
+    return measureRelativePosition(expMxml, elm->findMeasure(), elm->pagePos());
 }
 
 //---------------------------------------------------------
@@ -4448,6 +4459,8 @@ void ExportMusicXml::chord(Chord* chord, staff_idx_t staff, const std::vector<Ly
         } else if (const Stem* stem = note->chord()->stem()) {
             String stemTag = u"stem";
             stemTag += color2xml(stem);
+            // the stem's default-y is the position of its free end (away from the noteheads); like Finale, omit default-x
+            stemTag += measureRelativePosition(this, stem->findMeasure(), stem->pagePos() + stem->ldata()->line.p2(), false, true);
             m_xml.tagRaw(stemTag, note->chord()->up() ? "up" : "down");
         }
 
