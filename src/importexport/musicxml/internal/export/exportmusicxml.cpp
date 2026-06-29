@@ -3505,6 +3505,7 @@ void ExportMusicXml::chordAttributes(Chord* chord, Notations& notations, TrillHa
             mxmlOrnam += String(u" placement=\"%1\"").arg(placement);
         }
         mxmlOrnam += color2xml(ornam);
+        mxmlOrnam += ExportMusicXml::positioningAttributes(ornam);
 
         notations.tag(m_xml, ornam, "ornaments");
         m_xml.tagRaw(mxmlOrnam);
