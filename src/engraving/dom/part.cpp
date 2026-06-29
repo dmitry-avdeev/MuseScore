@@ -302,7 +302,8 @@ void Part::setCapoFret(int capoFret)
 
 int Part::midiChannel() const
 {
-    return masterScore()->midiChannel(instrument()->channel(0)->channel());
+    const InstrChannel* c = instrument() ? instrument()->channel(0) : nullptr;
+    return c ? masterScore()->midiChannel(c->channel()) : -1;
 }
 
 //---------------------------------------------------------
@@ -311,7 +312,8 @@ int Part::midiChannel() const
 
 int Part::midiPort() const
 {
-    return masterScore()->midiPort(instrument()->channel(0)->channel());
+    const InstrChannel* c = instrument() ? instrument()->channel(0) : nullptr;
+    return c ? masterScore()->midiPort(c->channel()) : -1;
 }
 
 //---------------------------------------------------------

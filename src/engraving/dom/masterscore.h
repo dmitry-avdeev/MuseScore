@@ -150,8 +150,8 @@ public:
     MidiMapping* midiMapping(int channel) { return &m_midiMapping[channel]; }
     void addMidiMapping(InstrChannel* channel, Part* part, int midiPort, int midiChannel);
     void updateMidiMapping(InstrChannel* channel, Part* part, int midiPort, int midiChannel);
-    int midiPort(int idx) const { return m_midiMapping[idx].port(); }
-    int midiChannel(int idx) const { return m_midiMapping[idx].channel(); }
+    int midiPort(int idx) const { return (idx >= 0 && idx < int(m_midiMapping.size())) ? m_midiMapping[idx].port() : -1; }
+    int midiChannel(int idx) const { return (idx >= 0 && idx < int(m_midiMapping.size())) ? m_midiMapping[idx].channel() : -1; }
     void rebuildMidiMapping();
     void checkMidiMapping();
     bool exportMidiMapping() { return !m_isSimpleMidiMapping; }
