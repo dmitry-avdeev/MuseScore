@@ -43,15 +43,22 @@ jobs:
           </score-partwise>
           XML
 
-      - name: gdb --version (isolate init-time crash)
+      - name: Locate inner binary
         run: |
-          export HOME="$PWD/h"; mkdir -p "$HOME"
-          xvfb-run -a gdb -batch -ex run -ex 'bt' --args \
-            ./squashfs-root/AppRun --version 2>&1 | tail -40 || true
+          find squashfs-root -maxdepth 3 -name 'mscore*' -type f -printf '%p\n' || true
+          echo "BIN=$(find squashfs-root -maxdepth 3 -name 'mscore*portable*' -type f | head -1)" >> "$GITHUB_ENV"
 
-      - name: gdb convert (the real path)
+      - name: Run + capture core dump, then backtrace
         run: |
           export HOME="$PWD/h"; mkdir -p "$HOME"
-          xvfb-run -a gdb -batch -ex run -ex 'bt' --args \
-            ./squashfs-root/AppRun in.musicxml -o out.musicxml 2>&1 | tail -60 || true
-          echo "--- output? ---"; ls -la out.musicxml 2>&1 || echo "no output produced"
+          ulimit -c unlimited
+          sudo sysctl -w kernel.core_pattern="$PWD/core.%e.%p" || true
+          echo "=== run via AppRun (sets bundled env) ==="
+          xvfb-run -a ./squashfs-root/AppRun in.musicxml -o out.musicxml; echo "exit=$?"
+          echo "=== output? ==="; ls -la out.musicxml 2>&1 || echo "no output"
+          echo "=== cores ==="; ls -la core.* 2>&1 || echo "no core"
+          core=$(ls core.* 2>/dev/null | head -1)
+          if [ -n "$core" ] && [ -n "$BIN" ]; then
+            echo "=== backtrace ($BIN / $core) ==="
+            gdb "$BIN" "$core" -batch -ex 'bt' 2>&1 | head -70
+          fi
