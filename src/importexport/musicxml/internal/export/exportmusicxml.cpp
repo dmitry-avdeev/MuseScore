@@ -36,6 +36,7 @@
 #include "exportmusicxml.h"
 
 #include <math.h>
+#include <optional>
 #include <set>
 
 #include "containers.h"
@@ -415,7 +416,8 @@ private:
     bool shouldWritePageNo(const Page* page);
 
     static String measureRelativePosition(const ExportMusicXml* const expMxml, const Measure* const meas, const PointF& pagePos,
-                                          const bool includeX = true, const bool includeY = true);
+                                          const bool includeX = true, const bool includeY = true,
+                                          const std::optional<double> yOriginPagePx = std::nullopt);
     static String elementPosition(const ExportMusicXml* const expMxml, const EngravingItem* const elm);
     static String positioningAttributesForTboxText(const PointF position, float spatium);
     void identification(XmlWriter& xml, Score const* const score);
@@ -4306,7 +4308,7 @@ static void writePitch(XmlWriter& xml, const Note* const note, const bool useDru
 //---------------------------------------------------------
 
 String ExportMusicXml::measureRelativePosition(const ExportMusicXml* const expMxml, const Measure* const meas, const PointF& pagePos,
-                                               const bool includeX, const bool includeY)
+                                               const bool includeX, const bool includeY, const std::optional<double> yOriginPagePx)
 {
     String res;
 
@@ -4317,8 +4319,13 @@ String ExportMusicXml::measureRelativePosition(const ExportMusicXml* const expMx
 
         const double pageHeight  = expMxml->getTenthsFromInches(expMxml->score()->style().styleD(Sid::pageHeight));
 
+        // default-x is measured from the start of the measure; default-y from the top
+        // line of the staff (MusicXML position group). They share a reference only on
+        // the top staff, so callers needing per-staff y pass that staff's top-line page
+        // position via yOriginPagePx.
+        const double yOriginPx = yOriginPagePx.value_or(meas->pagePos().y());
         double measureX = expMxml->getTenthsFromDots(meas->pagePos().x());
-        double measureY = pageHeight - expMxml->getTenthsFromDots(meas->pagePos().y());
+        double measureY = pageHeight - expMxml->getTenthsFromDots(yOriginPx);
         double elemX = expMxml->getTenthsFromDots(pagePos.x());
         double elemY = pageHeight - expMxml->getTenthsFromDots(pagePos.y());
 
@@ -4459,8 +4466,15 @@ void ExportMusicXml::chord(Chord* chord, staff_idx_t staff, const std::vector<Ly
         } else if (const Stem* stem = note->chord()->stem()) {
             String stemTag = u"stem";
             stemTag += color2xml(stem);
-            // the stem's default-y is the position of its free end (away from the noteheads); like Finale, omit default-x
-            stemTag += measureRelativePosition(this, stem->findMeasure(), stem->pagePos() + stem->ldata()->line.p2(), false, true);
+            // the stem's default-y is the position of its free end (away from the noteheads),
+            // measured from the top line of the chord's staff; like Finale, omit default-x
+            const Measure* stemMeas = stem->findMeasure();
+            const System* stemSys = stemMeas ? stemMeas->system() : nullptr;
+            std::optional<double> staffTopPx;
+            if (stemSys) {
+                staffTopPx = stemSys->staffYpage(note->chord()->vStaffIdx());
+            }
+            stemTag += measureRelativePosition(this, stemMeas, stem->pagePos() + stem->ldata()->line.p2(), false, true, staffTopPx);
             m_xml.tagRaw(stemTag, note->chord()->up() ? "up" : "down");
         }
 
