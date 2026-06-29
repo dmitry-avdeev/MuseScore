@@ -18,6 +18,9 @@ jobs:
 
   release:
     needs: build
+    # Run even if another matrix leg (e.g. arm64) failed: we only need the x86_64
+    # artifact, which is uploaded by its own leg regardless.
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -35,9 +38,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          appimage=$(find artifacts -iname '*.AppImage' | head -1)
+          # pick the x86_64 AppImage specifically (an arm64 leg may also produce one)
+          appimage=$(find artifacts -iname '*x86_64*.AppImage' | head -1)
           if [ -z "$appimage" ]; then
-            echo "No AppImage found in artifacts" >&2
+            echo "No x86_64 AppImage found in artifacts" >&2
             exit 1
           fi
           echo "Publishing: $appimage"
