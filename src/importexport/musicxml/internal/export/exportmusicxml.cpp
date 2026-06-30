@@ -373,7 +373,7 @@ public:
 
     static bool canWrite(const EngravingItem* e);
 
-    static String positioningAttributes(EngravingItem const* const el, bool isSpanStart = true);
+    static String positioningAttributes(EngravingItem const* const el, bool isSpanStart = true, bool measureRelativeX = false);
     static String fermataPosition(const Fermata* const fermata);
 
 private:
@@ -520,7 +520,7 @@ static String positionToString(const PointF def, const PointF rel, const float s
 //   while all other elements are relative to their position or the nearest note.
 //---------------------------------------------------------
 
-String ExportMusicXml::positioningAttributes(EngravingItem const* const el, bool isSpanStart)
+String ExportMusicXml::positioningAttributes(EngravingItem const* const el, bool isSpanStart, bool measureRelativeX)
 {
     if (!configuration()->exportLayout()) {
         return String();
@@ -565,6 +565,16 @@ String ExportMusicXml::positioningAttributes(EngravingItem const* const el, bool
     } else {
         def = el->ldata()->pos();       // Note: for some elements, Finale Notepad seems to work slightly better w/o default-x
         rel = el->offset();
+
+        // For children of the direction-type element (and notes), the MusicXML position
+        // group measures default-x from the start of the measure, not from the element's
+        // parent segment. el->ldata()->pos() is parent-relative, so convert it here;
+        // otherwise tempo/dynamics marks export an origin left of the clef.
+        if (measureRelativeX) {
+            if (const Measure* meas = el->findMeasure()) {
+                def.setX(el->pagePos().x() - meas->pagePos().x());
+            }
+        }
     }
 
     return positionToString(def, rel, spatium);
@@ -4931,7 +4941,7 @@ static void wordsMetronome(XmlWriter& xml, const MStyle& s, TextBase const* cons
     if (findMetronome(list, wordsLeft, hasParen, metroLeft, metroRight, wordsRight)) {
         if (wordsLeft.size() > 0) {
             xml.startElement("direction-type");
-            String attr = ExportMusicXml::positioningAttributes(text);
+            String attr = ExportMusicXml::positioningAttributes(text, true, true);
             MScoreTextToMusicXml mttm(u"words", attr, defFmt, mtf);
             mttm.writeTextFragments(wordsLeft, xml);
             xml.endElement();
@@ -4940,7 +4950,7 @@ static void wordsMetronome(XmlWriter& xml, const MStyle& s, TextBase const* cons
         xml.startElement("direction-type");
         String tagName = String(u"metronome parentheses=\"%1\"").arg(hasParen ? u"yes" : u"no");
         tagName += color2xml(text);
-        tagName += ExportMusicXml::positioningAttributes(text);
+        tagName += ExportMusicXml::positioningAttributes(text, true, true);
         if (!text->visible()) {
             tagName += u" print-object=\"no\"";
         }
@@ -4963,7 +4973,7 @@ static void wordsMetronome(XmlWriter& xml, const MStyle& s, TextBase const* cons
 
         if (wordsRight.size() > 0) {
             xml.startElement("direction-type");
-            String attr = ExportMusicXml::positioningAttributes(text);
+            String attr = ExportMusicXml::positioningAttributes(text, true, true);
             MScoreTextToMusicXml mttm(u"words", attr, defFmt, mtf);
             mttm.writeTextFragments(wordsRight, xml);
             xml.endElement();
@@ -4973,7 +4983,7 @@ static void wordsMetronome(XmlWriter& xml, const MStyle& s, TextBase const* cons
         String attr;
         attr += frame2xml(text);
         attr += color2xml(text);
-        attr += ExportMusicXml::positioningAttributes(text);
+        attr += ExportMusicXml::positioningAttributes(text, true, true);
         MScoreTextToMusicXml mttm(u"words", attr, defFmt, mtf);
         //LOGD("words('%s')", muPrintable(text->text()));
         mttm.writeTextFragments(text->fragmentList(), xml);
@@ -5324,7 +5334,7 @@ void ExportMusicXml::rehearsal(RehearsalMark const* const rmk, staff_idx_t staff
         attr = u" enclosure=\"none\"";
     }
     attr += color2xml(rmk);
-    attr += positioningAttributes(rmk);
+    attr += positioningAttributes(rmk, true, true);
     if (configuration()->exportLayout()) {
         switch (rmk->align().horizontal) {
         case AlignH::LEFT:
@@ -6002,7 +6012,7 @@ void ExportMusicXml::dynamic(Dynamic const* const dyn, staff_idx_t staff)
     String tagName = u"dynamics";
     tagName += frame2xml(dyn);
     tagName += color2xml(dyn);
-    tagName += positioningAttributes(dyn);
+    tagName += positioningAttributes(dyn, true, true);
     m_xml.startElementRaw(tagName);
     const String dynTypeName = String::fromAscii(TConv::toXml(dyn->dynamicType()).ascii());
     bool hasCustomText = dyn->hasCustomText();
