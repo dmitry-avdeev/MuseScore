@@ -100,6 +100,7 @@ getCrossPlatformDependencies() {
   copyQt plugins/imageformats/libqtiff.so
 
   copyQt plugins/platforms/libqxcb.so #qwindows.dll
+  copyQt plugins/platforms/libqoffscreen.so # headless layout/MIDI passes (-platform offscreen), used by the Legato Space
 
   copyQt plugins/printsupport/libcupsprintersupport.so #windowsprintersupport.dll
 

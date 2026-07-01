@@ -146,6 +146,9 @@ unwanted_files=(
 # additions at https://github.com/linuxdeploy/linuxdeploy-plugin-qt/issues
 additional_qt_components=(
   /plugins/printsupport/libcupsprintersupport.so
+  # headless layout/MIDI passes (`mscore -platform offscreen`), used by the Legato
+  # Space; linuxdeploy-plugin-qt bundles only the xcb platform plugin by default.
+  /plugins/platforms/libqoffscreen.so
 )
 
 # ADDITIONAL LIBRARIES
