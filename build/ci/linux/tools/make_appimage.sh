@@ -155,8 +155,9 @@ additional_qt_components=(
 # linuxdeploy may have missed some libraries that we need
 # Report new additions at https://github.com/linuxdeploy/linuxdeploy/issues
 additional_libraries=(
-  libssl.so.1.0.0    # OpenSSL (for Save Online)
-  libcrypto.so.1.0.0 # OpenSSL (for Save Online)
+  # OpenSSL 1.0 (libssl.so.1.0.0 / libcrypto.so.1.0.0, for Save Online TLS) was
+  # dropped: it is unavailable on modern build runners and unused by the Legato
+  # headless conversion. Qt dlopens OpenSSL only when TLS is actually used.
 )
 
 # FALLBACK LIBRARIES

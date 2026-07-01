@@ -60,9 +60,12 @@ apt_packages_runtime=(
   libcups2
   libdbus-1-3
   libegl1-mesa-dev
-  libodbc1
   libpq-dev
-  libssl1.0.0
+  # libodbc1 and libssl1.0.0 were dropped: they no longer exist on modern runners
+  # (renamed/removed since ubuntu-16.04) and are only needed for the ODBC SQL driver
+  # and Save Online TLS respectively — neither is used by the Legato headless
+  # layout/MIDI conversion. Qt loads OpenSSL lazily (dlopen), so its absence does not
+  # prevent mscore from starting or converting.
   libxcomposite-dev
   libxcursor-dev
   libxi-dev
