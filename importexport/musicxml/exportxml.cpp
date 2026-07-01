@@ -2726,6 +2726,10 @@ void ExportMusicXml::chordAttributes(Chord* chord, Notations& notations, Technic
             if (mxmlOrnam != "") {
                   notations.tag(_xml);
                   ornaments.tag(_xml);
+                  // emit default-x/default-y so the engraved position round-trips, as
+                  // articulations and technical marks already do (default-x relative to
+                  // the note, default-y from the staff top line) — matching Finale
+                  mxmlOrnam += positioningAttributes(a);
                   _xml.tagE(mxmlOrnam);
                   }
             }
