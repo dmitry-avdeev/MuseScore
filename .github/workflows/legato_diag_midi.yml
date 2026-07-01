@@ -72,16 +72,18 @@ jobs:
           # MIDI render runs away allocating and aborts ~25s in. Attach at 8s — well
           # into the runaway but before the abort — so the (unstripped) bt shows the
           # loop doing the allocation, not the post-abort terminate handler.
+          # Runaway is ~1.6 GB/s (12.8 GB / 8s), so poll fast: attach every ~0.7s
+          # from t=1s and grab a bt until the process aborts. Whichever snapshot
+          # lands mid-loop gives the symbolized allocation stack.
           xvfb-run -a bash -c '
             ./squashfs-root/AppRun in.musicxml -o out.mid & APP=$!
-            sleep 8
-            echo "=== RSS at snapshot ==="; ps -o pid,rss,vsz,etime,args -p $(pgrep -f "[m]score4portable") || true
-            for p in $(pgrep -f "[m]score4portable"); do
-              echo "############ gdb pid $p ############"
-              gdb -batch -p "$p" \
-                -ex "bt 40" \
-                -ex "echo \n== ALL THREADS ==\n" \
-                -ex "thread apply all bt 12" 2>&1 | head -260
+            for i in $(seq 1 14); do
+              p=$(pgrep -f "[m]score4portable" | head -1)
+              if [ -z "$p" ]; then echo "=== mscore gone at iter $i ==="; break; fi
+              rss=$(ps -o rss= -p "$p" 2>/dev/null)
+              echo "############ iter=$i pid=$p rss=${rss}kB ############"
+              gdb -batch -p "$p" -ex "bt 45" 2>&1 | grep -vE "Thread debugging|libthread_db|^\[New|^0x.* in \?\?|Using host" | head -60
+              sleep 0.7
             done
             kill -9 $APP 2>/dev/null || true; pkill -9 -f "[m]score" 2>/dev/null || true
           '
