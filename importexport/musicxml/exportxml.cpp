@@ -49,6 +49,7 @@
 #include "libmscore/clef.h"
 #include "libmscore/note.h"
 #include "libmscore/segment.h"
+#include "libmscore/stem.h"
 #include "libmscore/xml.h"
 #include "libmscore/beam.h"
 #include "libmscore/staff.h"
@@ -3239,25 +3240,40 @@ static void writePitch(XmlWriter& xml, const Note* const note, const bool useDru
 //   notePosition
 //---------------------------------------------------------
 
-static QString notePosition(const ExportMusicXml* const expMxml, const Note* const note)
+static QString measureRelativePosition(const ExportMusicXml* const expMxml, const Measure* const meas, const QPointF& pagePos,
+                                       const bool includeX = true, const bool includeY = true,
+                                       const bool useStaffYOrigin = false, const double yOriginPagePx = 0.0)
       {
       QString res;
 
       if (preferences.getBool(PREF_EXPORT_MUSICXML_EXPORTLAYOUT)) {
+            if (!meas)
+                  return res;
+
             const double pageHeight  = expMxml->getTenthsFromInches(expMxml->score()->styleD(Sid::pageHeight));
 
-            const auto chord = note->chord();
+            // default-x is measured from the start of the measure; default-y from the top
+            // line of the staff (MusicXML position group). They share a reference only on
+            // the top staff, so callers needing per-staff y pass that staff's top-line page
+            // position via yOriginPagePx (useStaffYOrigin); otherwise the measure origin is used.
+            const double yOriginPx = useStaffYOrigin ? yOriginPagePx : meas->pagePos().y();
+            double measureX = expMxml->getTenthsFromDots(meas->pagePos().x());
+            double measureY = pageHeight - expMxml->getTenthsFromDots(yOriginPx);
+            double elemX = expMxml->getTenthsFromDots(pagePos.x());
+            double elemY = pageHeight - expMxml->getTenthsFromDots(pagePos.y());
 
-            double measureX = expMxml->getTenthsFromDots(chord->measure()->pagePos().x());
-            double measureY = pageHeight - expMxml->getTenthsFromDots(chord->measure()->pagePos().y());
-            double noteX = expMxml->getTenthsFromDots(note->pagePos().x());
-            double noteY = pageHeight - expMxml->getTenthsFromDots(note->pagePos().y());
-
-            res += QString(" default-x=\"%1\"").arg(QString::number(noteX - measureX,'f',2));
-            res += QString(" default-y=\"%1\"").arg(QString::number(noteY - measureY,'f',2));
+            if (includeX)
+                  res += QString(" default-x=\"%1\"").arg(QString::number(elemX - measureX,'f',2));
+            if (includeY)
+                  res += QString(" default-y=\"%1\"").arg(QString::number(elemY - measureY,'f',2));
             }
 
       return res;
+      }
+
+static QString notePosition(const ExportMusicXml* const expMxml, const Note* const note)
+      {
+      return measureRelativePosition(expMxml, note->chord()->measure(), note->pagePos());
       }
 
 //---------------------------------------------------------
@@ -3355,8 +3371,17 @@ void ExportMusicXml::chord(Chord* chord, int staff, const std::vector<Lyrics*>* 
             if (chord->noStem() || chord->measure()->stemless(chord->staffIdx())) {
                   _xml.tag("stem", QString("none"));
                   }
-            else if (note->chord()->stem()) {
-                  _xml.tag("stem", QString(note->chord()->up() ? "up" : "down"));
+            else if (const Stem* stem = note->chord()->stem()) {
+                  // the stem's default-y is the position of its free end (away from the
+                  // noteheads), measured from the top line of the chord's staff; like
+                  // Finale, omit default-x
+                  const Measure* stemMeas = stem->findMeasure();
+                  const System* stemSys = stemMeas ? stemMeas->system() : nullptr;
+                  const bool haveStaffTop = stemSys != nullptr;
+                  const double staffTopPx = haveStaffTop ? stemSys->staffYpage(note->chord()->vStaffIdx()) : 0.0;
+                  const QString stemPos = measureRelativePosition(this, stemMeas, stem->pagePos() + stem->p2(),
+                                                                  false, true, haveStaffTop, staffTopPx);
+                  _xml.tag(QString("stem%1").arg(stemPos), QString(note->chord()->up() ? "up" : "down"));
                   }
 
             writeNotehead(_xml, note);
