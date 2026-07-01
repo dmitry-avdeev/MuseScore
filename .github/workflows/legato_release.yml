@@ -70,6 +70,9 @@ jobs:
         run: |
           set -euo pipefail
           appimage="${{ steps.find.outputs.appimage }}"
+          # package.sh runs under sudo, so the AppImage is root-owned; take ownership
+          # before making it executable and extracting it as the (non-root) runner user.
+          sudo chown "$(id -u):$(id -g)" "$appimage"
           chmod +x "$appimage"
           "$appimage" --appimage-extract >/dev/null
           apprun="$PWD/squashfs-root/AppRun"
