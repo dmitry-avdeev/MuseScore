@@ -62,6 +62,37 @@ jobs:
           echo "Found: $appimage"
           echo "appimage=$appimage" >> "$GITHUB_OUTPUT"
 
+      - name: Verify offscreen headless conversion
+        # Prove the AppImage bundles the offscreen platform plugin AND actually lays
+        # out a score headless (no X server) — exactly what the Legato Space needs.
+        # This would fail on a stock 3.6.2 AppImage (which bundles only xcb). Runs
+        # before publish so a broken build never reaches the release tag.
+        run: |
+          set -euo pipefail
+          appimage="${{ steps.find.outputs.appimage }}"
+          chmod +x "$appimage"
+          "$appimage" --appimage-extract >/dev/null
+          apprun="$PWD/squashfs-root/AppRun"
+
+          echo "== offscreen plugin bundled? =="
+          if ! find squashfs-root -name 'libqoffscreen.so' | grep -q .; then
+            echo "FAIL: libqoffscreen.so not bundled. platforms present:" >&2
+            find squashfs-root -path '*platforms*' -name '*.so' >&2
+            exit 1
+          fi
+          find squashfs-root -name 'libqoffscreen.so'
+
+          echo "== headless conversion under -platform offscreen (no DISPLAY) =="
+          unset DISPLAY || true
+          demo="$(find squashfs-root -name '*.mscz' | head -1)"
+          test -n "$demo"
+          "$apprun" -platform offscreen "$demo" -o /tmp/offscreen_out.musicxml
+          test -s /tmp/offscreen_out.musicxml
+          echo "OK: produced $(wc -c < /tmp/offscreen_out.musicxml) bytes of MusicXML headless"
+
+          echo "== spot-check our export patches are active =="
+          grep -m1 '<stem[^>]*default-y' /tmp/offscreen_out.musicxml && echo "  stem default-y: present" || echo "  (no stem default-y in this demo — not fatal)"
+
       - name: Publish AppImage to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
