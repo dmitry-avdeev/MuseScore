@@ -422,7 +422,7 @@ static QString positionToQString(const QPointF def, const QPointF rel, const flo
 //   while all other elements are relative to their position or the nearest note.
 //---------------------------------------------------------
 
-static QString positioningAttributes(Element const* const el, bool isSpanStart = true)
+static QString positioningAttributes(Element const* const el, bool isSpanStart = true, bool measureRelativeX = false)
       {
       if (!preferences.getBool(PREF_EXPORT_MUSICXML_EXPORTLAYOUT))
             return "";
@@ -471,6 +471,15 @@ static QString positioningAttributes(Element const* const el, bool isSpanStart =
       else {
             def = el->ipos();   // Note: for some elements, Finale Notepad seems to work slightly better w/o default-x
             rel = el->offset();
+
+            // For children of the direction-type element, the MusicXML position group
+            // measures default-x from the start of the measure, not from the element's
+            // parent segment. el->ipos() is parent-relative, so convert it here; otherwise
+            // tempo/dynamics marks export an origin left of the clef.
+            if (measureRelativeX) {
+                  if (const Measure* meas = el->findMeasure())
+                        def.setX(el->pagePos().x() - meas->pagePos().x());
+                  }
             }
 
       return positionToQString(def, rel, spatium);
@@ -3913,7 +3922,7 @@ static void wordsMetrome(XmlWriter& xml, Score* s, TextBase const* const text, c
       if (findMetronome(list, wordsLeft, hasParen, metroLeft, metroRight, wordsRight)) {
             if (wordsLeft.size() > 0) {
                   xml.stag("direction-type");
-                  QString attr = positioningAttributes(text);
+                  QString attr = positioningAttributes(text, true, true);
                   MScoreTextToMXML mttm("words", attr, defFmt, mtf);
                   mttm.writeTextFragments(wordsLeft, xml);
                   xml.etag();
@@ -3921,7 +3930,7 @@ static void wordsMetrome(XmlWriter& xml, Score* s, TextBase const* const text, c
 
             xml.stag("direction-type");
             QString tagName = QString("metronome parentheses=\"%1\"").arg(hasParen ? "yes" : "no");
-            tagName += positioningAttributes(text);
+            tagName += positioningAttributes(text, true, true);
             xml.stag(tagName);
             int len1 = 0;
             TDuration dur;
@@ -3938,7 +3947,7 @@ static void wordsMetrome(XmlWriter& xml, Score* s, TextBase const* const text, c
 
             if (wordsRight.size() > 0) {
                   xml.stag("direction-type");
-                  QString attr = positioningAttributes(text);
+                  QString attr = positioningAttributes(text, true, true);
                   MScoreTextToMXML mttm("words", attr, defFmt, mtf);
                   mttm.writeTextFragments(wordsRight, xml);
                   xml.etag();
@@ -3954,7 +3963,7 @@ static void wordsMetrome(XmlWriter& xml, Score* s, TextBase const* const text, c
                   else
                         attr = " enclosure=\"rectangle\"";
                   }
-            attr += positioningAttributes(text);
+            attr += positioningAttributes(text, true, true);
             MScoreTextToMXML mttm("words", attr, defFmt, mtf);
             //qDebug("words('%s')", qPrintable(text->text()));
             mttm.writeTextFragments(text->fragmentList(), xml);
@@ -4084,7 +4093,7 @@ void ExportMusicXml::rehearsal(RehearsalMark const* const rmk, int staff)
 
       directionTag(_xml, _attr, rmk);
       _xml.stag("direction-type");
-      QString attr = positioningAttributes(rmk);
+      QString attr = positioningAttributes(rmk, true, true);
       if (!rmk->hasFrame()) attr = " enclosure=\"none\"";
       // set the default words format
       const QString mtf = _score->styleSt(Sid::MusicalTextFont);
@@ -4505,7 +4514,7 @@ void ExportMusicXml::dynamic(Dynamic const* const dyn, int staff)
       _xml.stag("direction-type");
 
       QString tagName = "dynamics";
-      tagName += positioningAttributes(dyn);
+      tagName += positioningAttributes(dyn, true, true);
       _xml.stag(tagName);
       const QString dynTypeName = dyn->dynamicTypeName();
 
