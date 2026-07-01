@@ -1,0 +1,81 @@
+name: 'Legato: diagnose mscore MIDI hang'
+
+# Downloads the released patched AppImage and runs it headless under xvfb to
+# reproduce the MIDI (.mid) export HANG seen on the HuggingFace Space (layout
+# .musicxml exits fine, .mid times out at 40s). Differential: same minimal score
+# to .musicxml (should exit fast) vs .mid; if .mid hangs, snapshot every mscore
+# thread's stack via a gdb attach so we can see where it blocks.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb gdb dbus-x11 libxcb-cursor0 libopengl0 \
+            libegl1 libgl1-mesa-dri libnss3 libasound2t64 psmisc
+
+      - name: Download + extract released AppImage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download legato-linux-x64 --repo "${{ github.repository }}" \
+            --pattern '*x86_64*.AppImage' --output mscore.AppImage
+          chmod +x mscore.AppImage
+          ./mscore.AppImage --appimage-extract >/dev/null
+          echo "extracted:"; ls squashfs-root/AppRun
+
+      - name: Minimal score
+        run: |
+          cat > in.musicxml <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <score-partwise version="4.0">
+            <part-list><score-part id="P1"><part-name>P</part-name></score-part></part-list>
+            <part id="P1"><measure number="1">
+              <attributes><divisions>1</divisions><key><fifths>0</fifths></key>
+                <time><beats>4</beats><beat-type>4</beat-type></time>
+                <clef><sign>G</sign><line>2</line></clef></attributes>
+              <note><pitch><step>C</step><octave>5</octave></pitch><duration>4</duration><type>whole</type></note>
+            </measure></part>
+          </score-partwise>
+          XML
+
+      - name: Baseline — MusicXML export (expected fast)
+        run: |
+          export HOME="$PWD/h"; mkdir -p "$HOME"
+          t0=$(date +%s)
+          timeout 60 xvfb-run -a ./squashfs-root/AppRun in.musicxml -o out.musicxml \
+            && echo "musicxml exit=0" || echo "musicxml exit=$? (124=timeout)"
+          echo "elapsed=$(( $(date +%s) - t0 ))s"
+          ls -la out.musicxml 2>&1 || echo "no musicxml output"
+
+      - name: MIDI export + backtrace on hang
+        run: |
+          export HOME="$PWD/h2"; mkdir -p "$HOME"
+          sudo sysctl -w kernel.yama.ptrace_scope=0 || true
+          xvfb-run -a bash -c '
+            ./squashfs-root/AppRun in.musicxml -o out.mid &
+            APP=$!
+            # AppRun execs the inner portable mscore; give it time to reach the hang.
+            sleep 25
+            if ! kill -0 $APP 2>/dev/null; then
+              echo "=== finished before snapshot (no hang) ==="
+            else
+              echo "=== still running after 25s -> snapshot stacks ==="
+              ps -eLf | grep -i mscore | grep -v grep || true
+              for p in $(pgrep -f "[m]score"); do
+                echo "############ gdb pid $p ############"
+                gdb -batch -p "$p" \
+                  -ex "thread apply all bt" 2>&1 | head -200
+              done
+            fi
+            kill -9 $APP 2>/dev/null || true
+            pkill -9 -f "[m]score" 2>/dev/null || true
+          '
+          echo "=== output? ==="; ls -la out.mid 2>&1 || echo "no mid output"
