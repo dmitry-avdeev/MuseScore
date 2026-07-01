@@ -1,0 +1,76 @@
+name: 'Legato: build + release Linux mscore (3.6.2)'
+
+# Builds the patched MuseScore 3.6.2 for linux x86_64 and publishes the resulting
+# AppImage as a GitHub Release, so the HuggingFace Legato Space can download it for
+# its MusicXML layout + MIDI passes (see legato_infer.py).
+#
+# Publishes under its OWN tag `legato-3.6.2-linux-x64` — deliberately NOT the 4.x
+# production tag `legato-linux-x64`, so this (still-unvalidated) 3.6.2 AppImage never
+# clobbers the deployed 4.x build. To adopt it, point the Space at this tag via
+# LEGATO_MSCORE_TAG=legato-3.6.2-linux-x64.
+#
+# The build downloads its own Qt 5.9.8 and CMake (build/ci/linux/setup.sh) and
+# packages an AppImage via linuxdeploy (build/ci/linux/tools/make_appimage.sh),
+# which now also bundles the offscreen Qt platform plugin so `mscore -platform
+# offscreen` works headless (~3.5x faster than xvfb for MuseScore 3).
+#
+# HEADS UP — this build environment is dated and will likely need a CI shakeout:
+#   * The upstream 3.x CI targeted `ubuntu-16.04`, which GitHub has retired. We run
+#     on `ubuntu-22.04`; the Qt 5.9.8 toolchain is self-contained (fetched from S3),
+#     but the AppImage's glibc floor becomes 22.04's (fine for the modern HF Space).
+#   * build/ci/linux/setup.sh installs some packages that no longer exist on newer
+#     runners (e.g. `libssl1.0.0`). If setup fails on a missing apt package, trim/
+#     rename it there (the security libs are only needed for MuseScore's Save Online,
+#     which the Space does not use).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: sudo bash ./build/ci/linux/setup.sh
+
+      - name: Configure build mode
+        run: |
+          mkdir -p build.artifacts/env
+          bash ./build/ci/tools/make_build_mode_env.sh -e workflow_dispatch -m devel_build
+
+      - name: Build
+        run: sudo bash ./build/ci/linux/build.sh -n ${{ github.run_id }}
+
+      - name: Package (AppImage)
+        run: sudo bash ./build/ci/linux/package.sh
+
+      - name: Locate AppImage
+        id: find
+        run: |
+          set -euo pipefail
+          appimage=$(find build.artifacts -iname '*.AppImage' | head -1)
+          if [ -z "$appimage" ]; then
+            echo "No AppImage found under build.artifacts" >&2
+            find build.artifacts -type f | sort >&2
+            exit 1
+          fi
+          echo "Found: $appimage"
+          echo "appimage=$appimage" >> "$GITHUB_OUTPUT"
+
+      - name: Publish AppImage to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release delete legato-3.6.2-linux-x64 --repo "${{ github.repository }}" --yes --cleanup-tag || true
+          gh release create legato-3.6.2-linux-x64 \
+            "${{ steps.find.outputs.appimage }}#MuseScore-legato-x86_64.AppImage" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Legato MuseScore 3.6.2 (linux x86_64, offscreen)" \
+            --notes "Patched MuseScore 3.6.2 for the Legato MusicXML layout + MIDI passes (branch legato-3.6.2). Bundles the offscreen Qt platform plugin. Built by the legato_release workflow."
