@@ -55,27 +55,38 @@ jobs:
           echo "elapsed=$(( $(date +%s) - t0 ))s"
           ls -la out.musicxml 2>&1 || echo "no musicxml output"
 
-      - name: MIDI export + backtrace on hang
+      - name: Inspect inner binary + AppRun env
+        run: |
+          BIN=$(find squashfs-root -maxdepth 3 -name 'mscore*portable*' -type f | head -1)
+          echo "BIN=$BIN" | tee -a "$GITHUB_ENV"
+          file "$BIN" || true
+          echo "=== AppRun exports ==="; grep -nE 'export|LD_LIBRARY|QT_|APPDIR' squashfs-root/AppRun | head -40 || true
+          echo "=== renderScore symbol present? ==="
+          gdb -batch -ex 'info functions renderScore' "$BIN" 2>&1 | head -20 || true
+
+      - name: MIDI export — force bad_alloc fast, backtrace the allocation
         run: |
           export HOME="$PWD/h2"; mkdir -p "$HOME"
-          sudo sysctl -w kernel.yama.ptrace_scope=0 || true
-          xvfb-run -a bash -c '
-            ./squashfs-root/AppRun in.musicxml -o out.mid &
-            APP=$!
-            # AppRun execs the inner portable mscore; give it time to reach the hang.
-            sleep 25
-            if ! kill -0 $APP 2>/dev/null; then
-              echo "=== finished before snapshot (no hang) ==="
-            else
-              echo "=== still running after 25s -> snapshot stacks ==="
-              ps -eLf | grep -i mscore | grep -v grep || true
-              for p in $(pgrep -f "[m]score"); do
-                echo "############ gdb pid $p ############"
-                gdb -batch -p "$p" \
-                  -ex "thread apply all bt" 2>&1 | head -200
-              done
-            fi
-            kill -9 $APP 2>/dev/null || true
-            pkill -9 -f "[m]score" 2>/dev/null || true
-          '
+          # Cap virtual memory low so the runaway allocation throws in seconds, not
+          # after eating all RAM. Run via AppRun (correct bundled env) under xvfb,
+          # inside gdb with a catchpoint on the throw so we get the allocating stack.
+          cat > gdb.cmds <<'CMDS'
+          set pagination off
+          set logging file gdb_midi.log
+          set logging on
+          catch throw
+          run
+          echo \n===== BACKTRACE AT THROW =====\n
+          bt
+          thread apply all bt
+          echo \n===== INFO MALLOC =====\n
+          info proc status
+          CMDS
+          # AppRun is a shell wrapper; run gdb on the inner binary with AppRun's env.
+          export APPDIR="$PWD/squashfs-root"
+          set -a
+          eval "$(grep -E '^[[:space:]]*export ' "$APPDIR/AppRun" | sed 's/\${\?APPDIR}\?/'"$(printf '%s' "$APPDIR" | sed 's/[\/&]/\\&/g')"'/g')" 2>/dev/null || true
+          set +a
+          ( ulimit -v 4000000; \
+            xvfb-run -a gdb -batch -x gdb.cmds --args "$BIN" in.musicxml -o out.mid ) 2>&1 | head -220
           echo "=== output? ==="; ls -la out.mid 2>&1 || echo "no mid output"
