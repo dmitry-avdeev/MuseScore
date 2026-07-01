@@ -396,25 +396,22 @@ public:
 
 static QString positionToQString(const QPointF def, const QPointF rel, const float spatium)
       {
-      // minimum value to export
-      const float positionElipson = 0.1f;
+      // convert into tenths and round to whole tenths, matching Finale's integer coordinates
+      const int defaultX  = int(lround(10 * def.x() / spatium));
+      const int defaultY  = int(lround(-10 * def.y() / spatium));
+      const int relativeX = int(lround(10 * rel.x() / spatium));
+      const int relativeY = int(lround(-10 * rel.y() / spatium));
 
-      // convert into tenths for MusicXML
-      const float defaultX =  10 * def.x() / spatium;
-      const float defaultY =  -10 * def.y()  / spatium;
-      const float relativeX =  10 * rel.x() / spatium;
-      const float relativeY =  -10 * rel.y() / spatium;
-
-      // generate string representation
+      // generate string representation (omit whole-tenth zeros)
       QString res;
-      if (fabsf(defaultX) > positionElipson)
-            res += QString(" default-x=\"%1\"").arg(QString::number(defaultX, 'f', 2));
-      if (fabsf(defaultY) > positionElipson)
-            res += QString(" default-y=\"%1\"").arg(QString::number(defaultY, 'f', 2));
-      if (fabsf(relativeX) > positionElipson)
-            res += QString(" relative-x=\"%1\"").arg(QString::number(relativeX, 'f', 2));
-      if (fabsf(relativeY) > positionElipson)
-            res += QString(" relative-y=\"%1\"").arg(QString::number(relativeY, 'f', 2));
+      if (defaultX != 0)
+            res += QString(" default-x=\"%1\"").arg(defaultX);
+      if (defaultY != 0)
+            res += QString(" default-y=\"%1\"").arg(defaultY);
+      if (relativeX != 0)
+            res += QString(" relative-x=\"%1\"").arg(relativeX);
+      if (relativeY != 0)
+            res += QString(" relative-y=\"%1\"").arg(relativeY);
 
       return res;
       }
@@ -1245,8 +1242,8 @@ static void creditWords(XmlWriter& xml, const Score* const s, const int pageNr,
       xml.stag(QString("credit page=\"%1\"").arg(pageNr));
       if (creditType != "")
             xml.tag("credit-type", creditType);
-      QString attr = QString(" default-x=\"%1\"").arg(x);
-      attr += QString(" default-y=\"%1\"").arg(y);
+      QString attr = QString(" default-x=\"%1\"").arg(int(lround(x)));
+      attr += QString(" default-y=\"%1\"").arg(int(lround(y)));
       attr += " justify=\"" + just + "\"";
       attr += " valign=\"" + val + "\"";
       MScoreTextToMXML mttm("credit-words", attr, defFmt, mtf);
@@ -1704,15 +1701,14 @@ static QString fermataPosition(const Fermata* const fermata)
 
       if (preferences.getBool(PREF_EXPORT_MUSICXML_EXPORTLAYOUT)) {
             constexpr qreal SPATIUM2TENTHS = 10;
-            constexpr qreal EPSILON = 0.01;
             const auto spatium = fermata->spatium();
-            const auto defY = -1* SPATIUM2TENTHS* fermata->ipos().y() / spatium;
-            const auto relY = -1* SPATIUM2TENTHS* fermata->offset().y() / spatium;
+            const int defY = int(lround(-1 * SPATIUM2TENTHS * fermata->ipos().y() / spatium));
+            const int relY = int(lround(-1 * SPATIUM2TENTHS * fermata->offset().y() / spatium));
 
-            if (qAbs(defY) >= EPSILON)
-                  res += QString(" default-y=\"%1\"").arg(QString::number(defY,'f',2));
-            if (qAbs(relY) >= EPSILON)
-                  res += QString(" relative-y=\"%1\"").arg(QString::number(relY,'f',2));
+            if (defY != 0)
+                  res += QString(" default-y=\"%1\"").arg(defY);
+            if (relY != 0)
+                  res += QString(" relative-y=\"%1\"").arg(relY);
             }
 
       return res;
@@ -3266,10 +3262,11 @@ static QString measureRelativePosition(const ExportMusicXml* const expMxml, cons
             double elemX = expMxml->getTenthsFromDots(pagePos.x());
             double elemY = pageHeight - expMxml->getTenthsFromDots(pagePos.y());
 
+            // round to whole tenths, matching Finale's integer coordinates
             if (includeX)
-                  res += QString(" default-x=\"%1\"").arg(QString::number(elemX - measureX,'f',2));
+                  res += QString(" default-x=\"%1\"").arg(int(lround(elemX - measureX)));
             if (includeY)
-                  res += QString(" default-y=\"%1\"").arg(QString::number(elemY - measureY,'f',2));
+                  res += QString(" default-y=\"%1\"").arg(int(lround(elemY - measureY)));
             }
 
       return res;
