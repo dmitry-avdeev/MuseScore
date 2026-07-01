@@ -110,7 +110,10 @@ echo export QML2_IMPORT_PATH="${qt_path}/qml" >> ${ENV_FILE}
 
 # COMPILER
 
-gcc_version="7"
+# g++-7 is unavailable on modern runners (ubuntu-16.04 is retired); use g++-9,
+# the closest compiler still packaged on ubuntu-22.04. The build sets no -Werror,
+# so the newer compiler's extra warnings do not break it.
+gcc_version="9"
 apt-get install -y --no-install-recommends "g++-${gcc_version}"
 update-alternatives \
   --install /usr/bin/gcc gcc "/usr/bin/gcc-${gcc_version}" 40 \
