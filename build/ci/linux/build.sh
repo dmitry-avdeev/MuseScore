@@ -68,7 +68,13 @@ echo "=== BUILD ==="
 
 MUSESCORE_REVISION=$(git rev-parse --short=7 HEAD)
 
+# Build without QtWebEngine (the Start Center webview): its startup hook calls
+# QOpenGLContext::create() during app init, which segfaults under `-platform
+# offscreen` (no real GL). The Legato Space only does headless conversion and
+# needs none of it; disabling WebEngine is what lets MuseScore run offscreen
+# (matching the stock musescore3, which also ships without it).
 make CPUS=2 $OPTIONS \
+     BUILD_WEBENGINE=OFF \
      MUSESCORE_BUILD_CONFIG=$MUSESCORE_BUILD_CONFIG \
      MUSESCORE_REVISION=$MUSESCORE_REVISION \
      BUILD_NUMBER=$BUILD_NUMBER \
