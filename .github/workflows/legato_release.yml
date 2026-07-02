@@ -89,8 +89,36 @@ jobs:
           unset DISPLAY || true
           demo="$(find squashfs-root -name '*.mscz' | head -1)"
           test -n "$demo"
-          "$apprun" -platform offscreen "$demo" -o /tmp/offscreen_out.musicxml
-          test -s /tmp/offscreen_out.musicxml
+          binary="$PWD/squashfs-root/bin/mscore-portable-dev"
+
+          sudo apt-get -qq update && sudo apt-get -qq install -y gdb
+          sudo bash -c 'echo "/tmp/core.%e.%p" > /proc/sys/kernel/core_pattern'
+          ulimit -c unlimited
+
+          # (A) MIDI export exercises layout but NOT the MusicXML exporter — isolates
+          #     whether the crash is in our export patch vs. general headless layout.
+          echo "-- (A) MIDI export (layout only) --"
+          if "$apprun" -platform offscreen "$demo" -o /tmp/o.mid; then
+            echo "MIDI_OK size=$(wc -c < /tmp/o.mid)"
+          else
+            echo "MIDI_FAIL rc=$?"
+          fi
+
+          # (B) MusicXML export (our patched exporter).
+          echo "-- (B) MusicXML export --"
+          "$apprun" -platform offscreen "$demo" -o /tmp/offscreen_out.musicxml || echo "MXML_FAIL rc=$?"
+
+          if [ ! -s /tmp/offscreen_out.musicxml ]; then
+            echo "== crash backtrace (gdb on core) =="
+            core="$(ls -t /tmp/core.* 2>/dev/null | head -1 || true)"
+            if [ -n "$core" ]; then
+              gdb -batch -ex 'bt' -ex quit "$binary" "$core" 2>&1 | tail -60
+            else
+              echo "no core file found; re-running the crash under gdb directly"
+              gdb -batch -ex run -ex 'bt' -ex quit --args "$binary" -platform offscreen "$demo" -o /tmp/offscreen_out.musicxml 2>&1 | tail -60
+            fi
+            exit 1
+          fi
           echo "OK: produced $(wc -c < /tmp/offscreen_out.musicxml) bytes of MusicXML headless"
 
           echo "== spot-check our export patches are active =="
