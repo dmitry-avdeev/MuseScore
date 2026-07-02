@@ -3286,6 +3286,11 @@ static QString notePosition(const ExportMusicXml* const expMxml, const Note* con
       return measureRelativePosition(expMxml, note->chord()->measure(), note->pagePos());
       }
 
+static QString restPosition(const ExportMusicXml* const expMxml, const Rest* const rest)
+      {
+      return measureRelativePosition(expMxml, rest->measure(), rest->pagePos());
+      }
+
 //---------------------------------------------------------
 //   chord
 //---------------------------------------------------------
@@ -3492,6 +3497,7 @@ void ExportMusicXml::rest(Rest* rest, int staff)
 
       QString noteTag = QString("note");
       noteTag += color2xml(rest);
+      noteTag += restPosition(this, rest);
       if (!rest->visible() ) {
             noteTag += QString(" print-object=\"no\"");
             }

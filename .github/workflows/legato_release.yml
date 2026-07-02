@@ -97,6 +97,17 @@ jobs:
           grep -m1 '<stem[^>]*default-y' /tmp/offscreen_out.musicxml \
             || echo "  (no stem default-y in this demo — not fatal)"
 
+          echo "== spot-check rest default-x is emitted =="
+          # A rest is a <note ...> whose next line is <rest/>: the default-x lives on
+          # that wrapping <note>. Confirm rests exist and at least one carries default-x.
+          rests=$(grep -c '<rest' /tmp/offscreen_out.musicxml || true)
+          rest_x=$(grep -A1 '<note[^>]*default-x' /tmp/offscreen_out.musicxml | grep -c '<rest' || true)
+          echo "  rests=$rests rest-notes-with-default-x=$rest_x"
+          if [ "$rests" -gt 0 ] && [ "$rest_x" -eq 0 ]; then
+            echo "FAIL: rests present but none carry default-x" >&2
+            exit 1
+          fi
+
       - name: Publish AppImage to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
